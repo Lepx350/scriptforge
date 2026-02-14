@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Parallax Effects</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ===== HERO SECTION — Mouse-tracking 3D Parallax ===== -->
+  <section class="hero" id="hero">
+    <div class="hero__parallax-container">
+      <div class="hero__layer hero__layer--bg" data-depth="0.1">
+        <div class="stars"></div>
+      </div>
+      <div class="hero__layer hero__layer--mountains" data-depth="0.25">
+        <svg class="mountains" viewBox="0 0 1440 320" preserveAspectRatio="none">
+          <path d="M0,320 L120,260 L240,290 L360,200 L480,250 L600,160 L720,220 L840,140 L960,190 L1080,120 L1200,180 L1320,100 L1440,150 L1440,320 Z" fill="rgba(30,40,80,0.8)"/>
+          <path d="M0,320 L100,280 L200,300 L350,230 L500,270 L650,190 L800,250 L950,170 L1100,210 L1250,150 L1440,200 L1440,320 Z" fill="rgba(20,30,60,0.6)"/>
+        </svg>
+      </div>
+      <div class="hero__layer hero__layer--particles" data-depth="0.4">
+        <div class="floating-particles" id="particles"></div>
+      </div>
+      <div class="hero__layer hero__layer--title" data-depth="0.6">
+        <h1 class="hero__title">
+          <span class="hero__title-line">3D Parallax</span>
+          <span class="hero__title-line hero__title-line--accent">Effects</span>
+        </h1>
+        <p class="hero__subtitle">Move your mouse to explore the depth</p>
+      </div>
+      <div class="hero__layer hero__layer--foreground" data-depth="0.85">
+        <div class="hero__orb hero__orb--1"></div>
+        <div class="hero__orb hero__orb--2"></div>
+        <div class="hero__orb hero__orb--3"></div>
+      </div>
+    </div>
+    <div class="scroll-indicator">
+      <span>Scroll Down</span>
+      <div class="scroll-indicator__arrow"></div>
+    </div>
+  </section>
+
+  <!-- ===== TILT CARDS SECTION ===== -->
+  <section class="cards-section" id="cards">
+    <div class="section-header" data-scroll-reveal>
+      <h2 class="section-title">3D Tilt Cards</h2>
+      <p class="section-desc">Hover over the cards to see the 3D tilt effect</p>
+    </div>
+    <div class="cards-grid">
+      <div class="tilt-card" data-scroll-reveal data-scroll-delay="0">
+        <div class="tilt-card__inner">
+          <div class="tilt-card__shine"></div>
+          <div class="tilt-card__icon">&#9672;</div>
+          <h3 class="tilt-card__title">Perspective</h3>
+          <p class="tilt-card__text">CSS 3D transforms create realistic depth perception with dynamic perspective shifts.</p>
+        </div>
+      </div>
+      <div class="tilt-card" data-scroll-reveal data-scroll-delay="100">
+        <div class="tilt-card__inner">
+          <div class="tilt-card__shine"></div>
+          <div class="tilt-card__icon">&#9678;</div>
+          <h3 class="tilt-card__title">Motion</h3>
+          <p class="tilt-card__text">Smooth mouse-tracking parallax layers respond to cursor movement in real-time.</p>
+        </div>
+      </div>
+      <div class="tilt-card" data-scroll-reveal data-scroll-delay="200">
+        <div class="tilt-card__inner">
+          <div class="tilt-card__shine"></div>
+          <div class="tilt-card__icon">&#9670;</div>
+          <h3 class="tilt-card__title">Depth</h3>
+          <p class="tilt-card__text">Multiple layers at varying distances create an immersive parallax scrolling experience.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SCROLL PARALLAX SECTION ===== -->
+  <section class="scroll-parallax" id="scroll-parallax">
+    <div class="scroll-parallax__bg-layer" data-scroll-speed="-0.3"></div>
+    <div class="scroll-parallax__mid-layer" data-scroll-speed="-0.15">
+      <div class="geometric-shape shape--triangle"></div>
+      <div class="geometric-shape shape--circle"></div>
+      <div class="geometric-shape shape--square"></div>
+      <div class="geometric-shape shape--diamond"></div>
+    </div>
+    <div class="scroll-parallax__content" data-scroll-speed="0.05">
+      <h2 class="section-title section-title--light" data-scroll-reveal>Scroll Parallax</h2>
+      <p class="section-desc section-desc--light" data-scroll-reveal>
+        Each layer scrolls at a different speed, creating a sense of depth as you navigate through the page.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== 3D SCENE SECTION ===== -->
+  <section class="scene-section" id="scene">
+    <div class="section-header" data-scroll-reveal>
+      <h2 class="section-title">3D Perspective Scene</h2>
+      <p class="section-desc">Move your mouse to rotate the scene in 3D space</p>
+    </div>
+    <div class="scene-container">
+      <div class="scene" id="scene3d">
+        <div class="scene__cube">
+          <div class="scene__face scene__face--front"></div>
+          <div class="scene__face scene__face--back"></div>
+          <div class="scene__face scene__face--left"></div>
+          <div class="scene__face scene__face--right"></div>
+          <div class="scene__face scene__face--top"></div>
+          <div class="scene__face scene__face--bottom"></div>
+        </div>
+        <div class="scene__ring scene__ring--1"></div>
+        <div class="scene__ring scene__ring--2"></div>
+        <div class="scene__ring scene__ring--3"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== LAYERED DEPTH SECTION ===== -->
+  <section class="depth-section" id="depth">
+    <div class="depth-section__layer depth-section__layer--1" data-scroll-speed="-0.4">
+      <div class="depth-blob depth-blob--1"></div>
+      <div class="depth-blob depth-blob--2"></div>
+    </div>
+    <div class="depth-section__layer depth-section__layer--2" data-scroll-speed="-0.2">
+      <div class="depth-blob depth-blob--3"></div>
+      <div class="depth-blob depth-blob--4"></div>
+    </div>
+    <div class="depth-section__content" data-scroll-speed="0">
+      <h2 class="section-title" data-scroll-reveal>Layered Depth</h2>
+      <p class="section-desc" data-scroll-reveal>
+        Background blobs drift at different rates, separating visual planes and enhancing the illusion of three-dimensional space.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <p>3D Parallax Effects &mdash; Built with vanilla HTML, CSS &amp; JavaScript</p>
+  </footer>
+
+  <script src="js/parallax.js"></script>
+</body>
+</html>

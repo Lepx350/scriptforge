@@ -1,9 +1,15 @@
 /* ========================================
    3D PARALLAX EFFECTS — JavaScript Engine
+   iOS / iPhone compatible
    ======================================== */
 
 (function () {
   'use strict';
+
+  // ---- Device detection ----
+  var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   // ---- Utility: lerp for smooth interpolation ----
   function lerp(start, end, factor) {
@@ -25,20 +31,29 @@
   }
 
   /* ========================================
-     1. HERO — Mouse-tracking 3D Parallax
+     1. HERO — Mouse/Touch/Gyro 3D Parallax
      ======================================== */
-  var heroContainer = document.querySelector('.hero__parallax-container');
   var heroLayers = document.querySelectorAll('.hero__layer');
 
-  // Smoothed mouse position
+  // Smoothed input position (normalized -1..1)
   var mouse = { x: 0, y: 0 };
   var smoothMouse = { x: 0, y: 0 };
 
+  // Mouse tracking (desktop)
   document.addEventListener('mousemove', function (e) {
-    // Normalize to -1..1 from center
     mouse.x = (e.clientX / window.innerWidth - 0.5) * 2;
     mouse.y = (e.clientY / window.innerHeight - 0.5) * 2;
   });
+
+  // Touch tracking (mobile fallback if no gyro)
+  if (isTouchDevice) {
+    document.addEventListener('touchmove', function (e) {
+      var touch = e.touches[0];
+      if (!touch) return;
+      mouse.x = (touch.clientX / window.innerWidth - 0.5) * 2;
+      mouse.y = (touch.clientY / window.innerHeight - 0.5) * 2;
+    }, { passive: true });
+  }
 
   function updateHeroParallax() {
     smoothMouse.x = lerp(smoothMouse.x, mouse.x, 0.08);
@@ -58,7 +73,7 @@
   }
 
   /* ========================================
-     2. FLOATING PARTICLES
+     2. FLOATING PARTICLES (reduced on mobile)
      ======================================== */
   var particlesContainer = document.getElementById('particles');
 
@@ -68,7 +83,7 @@
       particle.className = 'particle';
 
       var size = Math.random() * 4 + 2;
-      var hue = Math.random() * 60 + 200; // blue-purple range
+      var hue = Math.random() * 60 + 200;
       var left = Math.random() * 100;
       var duration = Math.random() * 8 + 6;
       var delay = Math.random() * -duration;
@@ -86,10 +101,11 @@
     }
   }
 
-  createParticles(30);
+  // Fewer particles on mobile for performance
+  createParticles(isTouchDevice ? 15 : 30);
 
   /* ========================================
-     3. 3D TILT CARDS
+     3. 3D TILT CARDS (mouse + touch)
      ======================================== */
   var tiltCards = document.querySelectorAll('.tilt-card');
 
@@ -97,10 +113,10 @@
     var inner = card.querySelector('.tilt-card__inner');
     var shine = card.querySelector('.tilt-card__shine');
 
-    card.addEventListener('mousemove', function (e) {
+    function handleTilt(clientX, clientY) {
       var rect = card.getBoundingClientRect();
-      var x = e.clientX - rect.left;
-      var y = e.clientY - rect.top;
+      var x = clientX - rect.left;
+      var y = clientY - rect.top;
       var centerX = rect.width / 2;
       var centerY = rect.height / 2;
 
@@ -110,16 +126,31 @@
       inner.style.transform =
         'rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) scale3d(1.03, 1.03, 1.03)';
 
-      // Update shine position
       var shineX = (x / rect.width) * 100;
       var shineY = (y / rect.height) * 100;
       shine.style.setProperty('--shine-x', shineX + '%');
       shine.style.setProperty('--shine-y', shineY + '%');
-    });
+      shine.style.opacity = '1';
+    }
 
-    card.addEventListener('mouseleave', function () {
+    function resetTilt() {
       inner.style.transform = 'rotateX(0) rotateY(0) scale3d(1, 1, 1)';
+      shine.style.opacity = '0';
+    }
+
+    // Desktop: mouse events
+    card.addEventListener('mousemove', function (e) {
+      handleTilt(e.clientX, e.clientY);
     });
+    card.addEventListener('mouseleave', resetTilt);
+
+    // Mobile: touch events
+    card.addEventListener('touchmove', function (e) {
+      var touch = e.touches[0];
+      if (!touch) return;
+      handleTilt(touch.clientX, touch.clientY);
+    }, { passive: true });
+    card.addEventListener('touchend', resetTilt);
   });
 
   /* ========================================
@@ -128,8 +159,6 @@
   var scrollElements = document.querySelectorAll('[data-scroll-speed]');
 
   function updateScrollParallax() {
-    var scrollY = window.pageYOffset;
-
     scrollElements.forEach(function (el) {
       if (!isInViewport(el.parentElement || el, 200)) return;
 
@@ -143,7 +172,7 @@
   }
 
   /* ========================================
-     5. 3D SCENE — Mouse-driven rotation
+     5. 3D SCENE — Mouse/Touch rotation
      ======================================== */
   var scene3d = document.getElementById('scene3d');
   var sceneContainer = document.querySelector('.scene-container');
@@ -152,11 +181,6 @@
     if (!sceneContainer || !scene3d) return;
     if (!isInViewport(sceneContainer, 0)) return;
 
-    var rect = sceneContainer.getBoundingClientRect();
-    var centerX = rect.left + rect.width / 2;
-    var centerY = rect.top + rect.height / 2;
-
-    // Use smooth mouse position relative to scene center
     var relX = (mouse.x) * 25;
     var relY = (mouse.y) * -25;
 
@@ -212,22 +236,75 @@
   updateScrollParallax();
   updateScrollReveal();
 
-  // Handle resize
+  // Handle resize (and iOS orientation change)
   window.addEventListener('resize', function () {
     updateScrollParallax();
     updateScrollReveal();
   }, { passive: true });
 
   /* ========================================
-     8. TOUCH SUPPORT (mobile parallax)
+     8. iOS DEVICE ORIENTATION (with permission)
      ======================================== */
-  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-    // Use device orientation for mobile parallax
+  var motionPermissionBtn = document.getElementById('motionPermissionBtn');
+  var gyroActive = false;
+
+  function enableGyro() {
+    gyroActive = true;
     window.addEventListener('deviceorientation', function (e) {
       if (e.gamma === null || e.beta === null) return;
       mouse.x = clamp(e.gamma / 30, -1, 1);
       mouse.y = clamp((e.beta - 45) / 30, -1, 1);
     }, { passive: true });
+
+    // Hide the button once gyro is active
+    if (motionPermissionBtn) {
+      motionPermissionBtn.classList.remove('visible');
+      motionPermissionBtn.classList.add('hidden');
+    }
+  }
+
+  function initMotion() {
+    // iOS 13+ requires permission request via user gesture
+    if (isIOS && typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // Show permission button for iOS
+      if (motionPermissionBtn) {
+        motionPermissionBtn.classList.add('visible');
+        motionPermissionBtn.addEventListener('click', function () {
+          DeviceOrientationEvent.requestPermission()
+            .then(function (state) {
+              if (state === 'granted') {
+                enableGyro();
+              }
+            })
+            .catch(function (err) {
+              console.warn('Motion permission denied:', err);
+              if (motionPermissionBtn) {
+                motionPermissionBtn.classList.remove('visible');
+                motionPermissionBtn.classList.add('hidden');
+              }
+            });
+        });
+      }
+    } else if (isTouchDevice) {
+      // Android or older iOS — just enable directly
+      enableGyro();
+    }
+  }
+
+  initMotion();
+
+  /* ========================================
+     9. ADAPTIVE UI TEXT
+     ======================================== */
+  var heroSubtitle = document.querySelector('.hero__subtitle');
+  if (heroSubtitle && isTouchDevice) {
+    heroSubtitle.textContent = 'Tilt your device to explore the depth';
+  }
+
+  var sceneDesc = document.querySelector('#scene .section-desc');
+  if (sceneDesc && isTouchDevice) {
+    sceneDesc.textContent = 'Tilt your device to rotate the scene in 3D space';
   }
 
 })();

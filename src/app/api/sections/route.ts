@@ -20,21 +20,41 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Whitelist allowed fields per model to prevent mass assignment
+    const allowedFields: Record<string, string[]> = {
+      visual: ["scriptText", "directionText", "aiPrompt", "mediaLinks", "gfxSpecs"],
+      audio: ["scriptText", "musicMood", "musicBpmRange", "musicSearchTerms", "sfxCues"],
+      timeline: ["startTime", "durationSeconds", "narrationText", "visualLayers", "audioNotes"],
+      production: ["titles", "thumbnailConcepts", "description", "tags"],
+    };
+
+    const fields = allowedFields[model];
+    if (!fields) {
+      return NextResponse.json({ error: "Invalid model" }, { status: 400 });
+    }
+
+    const sanitized: Record<string, unknown> = {};
+    for (const key of fields) {
+      if (key in data) sanitized[key] = data[key];
+    }
+
+    if (Object.keys(sanitized).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
     switch (model) {
       case "visual":
-        await prisma.visualDirection.update({ where: { id }, data });
+        await prisma.visualDirection.update({ where: { id }, data: sanitized });
         break;
       case "audio":
-        await prisma.audioDirection.update({ where: { id }, data });
+        await prisma.audioDirection.update({ where: { id }, data: sanitized });
         break;
       case "timeline":
-        await prisma.timelineSegment.update({ where: { id }, data });
+        await prisma.timelineSegment.update({ where: { id }, data: sanitized });
         break;
       case "production":
-        await prisma.productionPackage.update({ where: { id }, data });
+        await prisma.productionPackage.update({ where: { id }, data: sanitized });
         break;
-      default:
-        return NextResponse.json({ error: "Invalid model" }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });

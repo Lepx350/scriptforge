@@ -35,9 +35,20 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Whitelist allowed fields to prevent mass assignment
+    const allowed = ["title", "status", "inputScript", "youtubeUrl", "estimatedDurationMinutes"] as const;
+    const data: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (key in body) data[key] = body[key];
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
     const project = await prisma.project.update({
       where: { id },
-      data: body,
+      data,
     });
 
     return NextResponse.json(project);

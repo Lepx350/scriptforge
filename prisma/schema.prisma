@@ -24,6 +24,9 @@ model Project {
   timelineSegments    TimelineSegment[]
   productionPackage   ProductionPackage?
   analytics           Analytics[]
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model VisualDirection {
@@ -41,6 +44,9 @@ model VisualDirection {
   createdAt      DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([sectionIndex])
 }
 
 model AudioDirection {
@@ -56,6 +62,9 @@ model AudioDirection {
   createdAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([sectionIndex])
 }
 
 model TimelineSegment {
@@ -70,6 +79,9 @@ model TimelineSegment {
   createdAt      DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([segmentIndex])
 }
 
 model ProductionPackage {
@@ -82,6 +94,8 @@ model ProductionPackage {
   createdAt         DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 model Analytics {
@@ -95,6 +109,8 @@ model Analytics {
   fetchedAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 model Settings {

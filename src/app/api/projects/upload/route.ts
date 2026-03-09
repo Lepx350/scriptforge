@@ -9,6 +9,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
+    // 10 MB file size limit
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "File too large. Maximum size is 10 MB." },
+        { status: 400 }
+      );
+    }
+
     const fileName = file.name.toLowerCase();
     let text = "";
 

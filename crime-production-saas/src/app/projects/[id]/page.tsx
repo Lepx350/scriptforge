@@ -191,37 +191,44 @@ function useInlineEdit(
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const startEdit = (id: string, fields: Record<string, string>) => {
     setEditingId(id);
     setEditData(fields);
+    setSaveError(null);
   };
 
   const cancel = () => {
     setEditingId(null);
     setEditData({});
+    setSaveError(null);
   };
 
   const save = async () => {
     if (!editingId) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await fetch("/api/sections", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model, id: editingId, data: editData }),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save");
+      }
       onSaved();
       cancel();
-    } catch {
-      // Let it stay in edit mode
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSaving(false);
     }
   };
 
-  return { editingId, editData, setEditData, saving, startEdit, cancel, save };
+  return { editingId, editData, setEditData, saving, saveError, startEdit, cancel, save };
 }
 
 // ─── Streaming Hook ───
@@ -278,7 +285,9 @@ function useStreamGeneration(projectId: string, onComplete: () => void) {
                 onComplete();
                 return;
               }
-            } catch {}
+            } catch {
+              // Skip malformed SSE lines — partial chunks are expected during streaming
+            }
           }
         }
 
@@ -301,12 +310,14 @@ function useStreamGeneration(projectId: string, onComplete: () => void) {
 
 function useSectionRegen(projectId: string, onComplete: () => void) {
   const [regenId, setRegenId] = useState<string | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
 
   const regenerate = async (
     module: "visual" | "audio" | "timeline",
     sectionId: string
   ) => {
     setRegenId(sectionId);
+    setRegenError(null);
     try {
       const res = await fetch("/api/generate/section", {
         method: "POST",
@@ -314,18 +325,18 @@ function useSectionRegen(projectId: string, onComplete: () => void) {
         body: JSON.stringify({ projectId, module, sectionId }),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Regeneration failed");
       }
       onComplete();
-    } catch {
-      // Error handled in UI
+    } catch (err) {
+      setRegenError(err instanceof Error ? err.message : "Regeneration failed");
     } finally {
       setRegenId(null);
     }
   };
 
-  return { regenId, regenerate };
+  return { regenId, regenError, setRegenError, regenerate };
 }
 
 // ─── Main Page ───
@@ -860,16 +871,28 @@ function VisualTab({
   };
 
   const copyPrompt = async (prompt: string, id: string) => {
-    await navigator.clipboard.writeText(prompt);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      setImageError((prev) => ({
+        ...prev,
+        [id]: "Failed to copy to clipboard",
+      }));
+    }
   };
 
   const downloadImage = (src: string, name: string) => {
-    const a = document.createElement("a");
-    a.href = src;
-    a.download = `${name}.png`;
-    a.click();
+    try {
+      const a = document.createElement("a");
+      a.href = src;
+      a.download = `${name}.png`;
+      a.click();
+    } catch {
+      // Download fallback — open in new tab
+      window.open(src, "_blank");
+    }
   };
 
   if (directions.length === 0) {
@@ -895,12 +918,20 @@ function VisualTab({
       {/* Lightbox */}
       {lightboxSrc && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8 cursor-pointer"
           onClick={() => setLightboxSrc(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setLightboxSrc(null);
+          }}
         >
           <button
             onClick={() => setLightboxSrc(null)}
             className="absolute top-4 right-4 text-white/70 hover:text-white"
+            aria-label="Close image preview"
+            title="Close (Esc)"
           >
             <X className="w-6 h-6" />
           </button>
@@ -1002,6 +1033,11 @@ function VisualTab({
             {isExpanded && (
               <div className="mt-4 pt-4 border-t border-border space-y-3">
                 {/* Action buttons for non-3D cards (unchanged) */}
+                {edit.saveError && isEditing && (
+                  <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+                    {edit.saveError}
+                  </div>
+                )}
                 <div className="flex gap-2 justify-end">
                   {isEditing ? (
                     <>
@@ -1057,6 +1093,14 @@ function VisualTab({
                     </>
                   )}
                 </div>
+                {regen.regenError && regen.regenId === null && (
+                  <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1 flex items-center justify-between">
+                    <span>{regen.regenError}</span>
+                    <button onClick={() => regen.setRegenError(null)} className="text-red-400 hover:text-red-300 ml-2">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
 
                 <div>
                   <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
@@ -1428,6 +1472,11 @@ function AudioTab({
                 )}
               </div>
             </div>
+            {(edit.saveError || regen.regenError) && (
+              <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+                {edit.saveError || regen.regenError}
+              </div>
+            )}
 
             <p className="text-sm text-text-secondary mb-4">
               {dir.scriptText}
@@ -1613,6 +1662,11 @@ function TimelineTab({
                     )}
                   </div>
                 </div>
+                {(edit.saveError || regen.regenError) && (
+                  <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+                    {edit.saveError || regen.regenError}
+                  </div>
+                )}
                 <EditableField
                   value={seg.narrationText}
                   field="narrationText"
@@ -1743,6 +1797,11 @@ function ProductionTab({
           )}
         </div>
       </div>
+      {edit.saveError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+          {edit.saveError}
+        </div>
+      )}
 
       {/* Titles */}
       {titles.length > 0 && (

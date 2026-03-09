@@ -1,41 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+/** Escape HTML special characters to prevent XSS */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Sanitize filename for Content-Disposition header */
+function safeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+}
+
 export async function GET(request: NextRequest) {
-  const projectId = request.nextUrl.searchParams.get("projectId");
-  const format = request.nextUrl.searchParams.get("format") || "markdown";
+  try {
+    const projectId = request.nextUrl.searchParams.get("projectId");
+    const format = request.nextUrl.searchParams.get("format") || "markdown";
 
-  if (!projectId) {
-    return NextResponse.json({ error: "Project ID required" }, { status: 400 });
-  }
+    if (!projectId) {
+      return NextResponse.json({ error: "Project ID required" }, { status: 400 });
+    }
 
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: {
-      visualDirections: { orderBy: { sectionIndex: "asc" } },
-      audioDirections: { orderBy: { sectionIndex: "asc" } },
-      timelineSegments: { orderBy: { segmentIndex: "asc" } },
-      productionPackage: true,
-    },
-  });
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        visualDirections: { orderBy: { sectionIndex: "asc" } },
+        audioDirections: { orderBy: { sectionIndex: "asc" } },
+        timelineSegments: { orderBy: { segmentIndex: "asc" } },
+        productionPackage: true,
+      },
+    });
 
-  if (!project) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
-  }
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
 
-  switch (format) {
-    case "markdown":
-      return exportMarkdown(project);
-    case "json":
-      return exportJSON(project);
-    case "csv":
-      return exportCSV(project);
-    case "pdf":
-      return exportPDF(project);
-    case "zip":
-      return exportZIP(project);
-    default:
-      return NextResponse.json({ error: "Unknown format" }, { status: 400 });
+    switch (format) {
+      case "markdown":
+        return exportMarkdown(project);
+      case "json":
+        return exportJSON(project);
+      case "csv":
+        return exportCSV(project);
+      case "pdf":
+        return exportPDF(project);
+      case "zip":
+        return exportZIP(project);
+      default:
+        return NextResponse.json({ error: "Unknown format" }, { status: 400 });
+    }
+  } catch (error) {
+    console.error("Export error:", error);
+    return NextResponse.json({ error: "Failed to export project" }, { status: 500 });
   }
 }
 
@@ -130,7 +150,7 @@ function exportMarkdown(project: any) {
   return new NextResponse(md, {
     headers: {
       "Content-Type": "text/markdown",
-      "Content-Disposition": `attachment; filename="${project.title}-package.md"`,
+      "Content-Disposition": `attachment; filename="${safeFilename(project.title)}-package.md"`,
     },
   });
 }
@@ -177,7 +197,7 @@ function exportJSON(project: any) {
   return new NextResponse(JSON.stringify(data, null, 2), {
     headers: {
       "Content-Type": "application/json",
-      "Content-Disposition": `attachment; filename="${project.title}-data.json"`,
+      "Content-Disposition": `attachment; filename="${safeFilename(project.title)}-data.json"`,
     },
   });
 }
@@ -211,7 +231,7 @@ function exportCSV(project: any) {
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="${project.title}-timeline.csv"`,
+      "Content-Disposition": `attachment; filename="${safeFilename(project.title)}-timeline.csv"`,
     },
   });
 }
@@ -252,7 +272,7 @@ function exportPDF(project: any) {
 <html>
 <head>
 <meta charset="utf-8">
-<title>${project.title} - Production Package</title>
+<title>${escapeHtml(project.title)} - Production Package</title>
 <style>
   body { font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #1a1a1a; line-height: 1.6; }
   h1 { color: #e63946; border-bottom: 2px solid #e63946; padding-bottom: 8px; }
@@ -276,7 +296,7 @@ function exportPDF(project: any) {
   return new NextResponse(html, {
     headers: {
       "Content-Type": "text/html",
-      "Content-Disposition": `attachment; filename="${project.title}-package.html"`,
+      "Content-Disposition": `attachment; filename="${safeFilename(project.title)}-package.html"`,
     },
   });
 }
@@ -337,7 +357,7 @@ function exportZIP(project: any) {
   return new NextResponse(Buffer.from(zipBuffer), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${project.title}-bundle.zip"`,
+      "Content-Disposition": `attachment; filename="${safeFilename(project.title)}-bundle.zip"`,
     },
   });
 }

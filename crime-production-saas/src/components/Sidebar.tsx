@@ -63,6 +63,9 @@ export default function Sidebar() {
 
       <button
         onClick={() => setCollapsed(!collapsed)}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Expand" : "Collapse"}
         className="flex items-center justify-center h-12 border-t border-border text-text-muted hover:text-text-primary transition-colors"
       >
         {collapsed ? (

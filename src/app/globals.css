@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0a0a0f;
+  --color-bg-secondary: #12121a;
+  --color-bg-card: #1a1a2e;
+  --color-bg-card-hover: #1e1e30;
+  --color-border: #2a2a3e;
+  --color-accent-red: #e63946;
+  --color-accent-red-hover: #ff4d5a;
+  --color-accent-blue: #4895ef;
+  --color-accent-blue-hover: #5aa5ff;
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #888888;
+  --color-text-muted: #555555;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+body {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* Component classes */
+.btn-primary {
+  background-color: var(--color-accent-red);
+  color: white;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+.btn-primary:hover {
+  background-color: var(--color-accent-red-hover);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+.btn-secondary:hover {
+  background-color: var(--color-bg-card-hover);
+}
+
+.card {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+}
+
+.input-field {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  color: var(--color-text-primary);
+  transition: border-color 0.2s;
+  width: 100%;
+}
+.input-field::placeholder {
+  color: var(--color-text-muted);
+}
+.input-field:focus {
+  outline: none;
+  border-color: var(--color-accent-blue);
+}
+
+.badge {
+  display: inline-flex;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-draft {
+  background-color: rgb(85 85 85 / 0.2);
+  color: var(--color-text-secondary);
+}
+
+.badge-in-production {
+  background-color: rgb(72 149 239 / 0.2);
+  color: var(--color-accent-blue);
+}
+
+.badge-editing {
+  background-color: rgb(245 158 11 / 0.2);
+  color: var(--color-warning);
+}
+
+.badge-published {
+  background-color: rgb(16 185 129 / 0.2);
+  color: var(--color-success);
+}

@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Project {
+  id                      String   @id @default(uuid())
+  title                   String
+  status                  String   @default("draft") // draft, in_production, editing, published
+  inputScript             String
+  inputMethod             String   @default("paste") // paste, upload
+  originalFilename        String?
+  estimatedDurationMinutes Int?
+  youtubeUrl              String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  visualDirections    VisualDirection[]
+  audioDirections     AudioDirection[]
+  timelineSegments    TimelineSegment[]
+  productionPackage   ProductionPackage?
+  analytics           Analytics[]
+}
+
+model VisualDirection {
+  id             String   @id @default(uuid())
+  projectId      String
+  sectionIndex   Int
+  scriptText     String
+  layerType      String   // 3d, media, gfx
+  directionText  String
+  aiPrompt       String?
+  mediaLinks     String?  // JSON string
+  gfxSpecs       String?  // JSON string
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model AudioDirection {
+  id              String   @id @default(uuid())
+  projectId       String
+  sectionIndex    Int
+  scriptText      String
+  musicMood       String
+  musicBpmRange   String
+  musicSearchTerms String
+  sfxCues         String?  // JSON string
+  voiceoverUrl    String?
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model TimelineSegment {
+  id             String   @id @default(uuid())
+  projectId      String
+  segmentIndex   Int
+  startTime      String
+  durationSeconds Int
+  narrationText  String
+  visualLayers   String?  // JSON string
+  audioNotes     String?  // JSON string
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProductionPackage {
+  id                String   @id @default(uuid())
+  projectId         String   @unique
+  titles            String?  // JSON string
+  thumbnailConcepts String?  // JSON string
+  description       String?
+  tags              String?
+  createdAt         DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Analytics {
+  id              String   @id @default(uuid())
+  projectId       String
+  views           Int      @default(0)
+  watchTimeHours  Float    @default(0)
+  avgViewDuration String?
+  ctr             Float    @default(0)
+  subscriberGain  Int      @default(0)
+  fetchedAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Settings {
+  id        String   @id @default("default")
+  geminiKey String?
+  elevenLabsKey String?
+  defaultVoice String?
+  updatedAt DateTime @updatedAt
+}

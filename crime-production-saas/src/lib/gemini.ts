@@ -48,6 +48,18 @@ function getModelChain(
   return [...MODEL_CHAINS[purpose]];
 }
 
+const VERCEL_TIMEOUT_MS = 55_000; // 55s to stay under Vercel's 60s limit
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("Generation is taking longer than expected, please try again")),
+      ms
+    );
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+
 async function generateWithRetry(
   systemPrompt: string,
   userPrompt: string,
@@ -67,7 +79,10 @@ async function generateWithRetry(
           model: modelName,
           systemInstruction: systemPrompt,
         });
-        const result = await model.generateContent(userPrompt);
+        const result = await withTimeout(
+          model.generateContent(userPrompt),
+          VERCEL_TIMEOUT_MS
+        );
         console.log(`[Gemini] ${purpose} generation succeeded: ${modelName}`);
         return result.response.text();
       } catch (error) {

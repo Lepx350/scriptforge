@@ -3,15 +3,15 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Project {
   id                      String   @id @default(uuid())
   title                   String
   status                  String   @default("draft") // draft, in_production, editing, published
-  inputScript             String
+  inputScript             String   @db.Text
   inputMethod             String   @default("paste") // paste, upload
   originalFilename        String?
   estimatedDurationMinutes Int?
@@ -30,12 +30,12 @@ model VisualDirection {
   id             String   @id @default(uuid())
   projectId      String
   sectionIndex   Int
-  scriptText     String
+  scriptText     String   @db.Text
   layerType      String   // 3d, media, gfx
-  directionText  String
-  aiPrompt       String?
-  mediaLinks     String?  // JSON string
-  gfxSpecs       String?  // JSON string
+  directionText  String   @db.Text
+  aiPrompt       String?  @db.Text
+  mediaLinks     String?  @db.Text // JSON string
+  gfxSpecs       String?  @db.Text // JSON string
   createdAt      DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -45,11 +45,11 @@ model AudioDirection {
   id              String   @id @default(uuid())
   projectId       String
   sectionIndex    Int
-  scriptText      String
+  scriptText      String   @db.Text
   musicMood       String
   musicBpmRange   String
-  musicSearchTerms String
-  sfxCues         String?  // JSON string
+  musicSearchTerms String  @db.Text
+  sfxCues         String?  @db.Text // JSON string
   voiceoverUrl    String?
   createdAt       DateTime @default(now())
 
@@ -62,9 +62,9 @@ model TimelineSegment {
   segmentIndex   Int
   startTime      String
   durationSeconds Int
-  narrationText  String
-  visualLayers   String?  // JSON string
-  audioNotes     String?  // JSON string
+  narrationText  String   @db.Text
+  visualLayers   String?  @db.Text // JSON string
+  audioNotes     String?  @db.Text // JSON string
   createdAt      DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -73,10 +73,10 @@ model TimelineSegment {
 model ProductionPackage {
   id                String   @id @default(uuid())
   projectId         String   @unique
-  titles            String?  // JSON string
-  thumbnailConcepts String?  // JSON string
-  description       String?
-  tags              String?
+  titles            String?  @db.Text // JSON string
+  thumbnailConcepts String?  @db.Text // JSON string
+  description       String?  @db.Text
+  tags              String?  @db.Text
   createdAt         DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

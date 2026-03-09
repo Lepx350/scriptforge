@@ -1,27 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  Save,
+  Eye,
+  EyeOff,
+  CheckCircle,
+  AlertCircle,
+  Trash2,
+  Zap,
+  Loader2,
+} from "lucide-react";
 
 export default function SettingsPage() {
   const [geminiKey, setGeminiKey] = useState("");
-  const [elevenLabsKey, setElevenLabsKey] = useState("");
-  const [defaultVoice, setDefaultVoice] = useState("");
+  const [hasGeminiKey, setHasGeminiKey] = useState(false);
+  const [coreModel, setCoreModel] = useState("");
+  const [visualModel, setVisualModel] = useState("");
+  const [coreModels, setCoreModels] = useState<string[]>([]);
+  const [visualModels, setVisualModels] = useState<string[]>([]);
   const [showGemini, setShowGemini] = useState(false);
-  const [showElevenLabs, setShowElevenLabs] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {
         setGeminiKey(data.geminiKey || "");
-        setElevenLabsKey(data.elevenLabsKey || "");
-        setDefaultVoice(data.defaultVoice || "");
+        setHasGeminiKey(data.hasGeminiKey || false);
+        setCoreModel(data.coreModel || "");
+        setVisualModel(data.visualModel || "");
+        setCoreModels(data.defaultCoreModels || []);
+        setVisualModels(data.defaultVisualModels || []);
       })
-      .catch(() => {});
+      .catch(() => setMessage({ type: "error", text: "Failed to load settings" }))
+      .finally(() => setLoading(false));
   }, []);
+
+  function showMsg(type: "success" | "error", text: string) {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 4000);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -30,26 +55,75 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ geminiKey, elevenLabsKey, defaultVoice }),
+        body: JSON.stringify({ geminiKey, coreModel, visualModel }),
       });
       if (!res.ok) throw new Error("Failed to save");
-      setMessage({ type: "success", text: "Settings saved successfully" });
+      if (geminiKey && !geminiKey.startsWith("\u2022")) setHasGeminiKey(true);
+      showMsg("success", "Settings saved successfully");
     } catch {
-      setMessage({ type: "error", text: "Failed to save settings" });
+      showMsg("error", "Failed to save settings");
     } finally {
       setSaving(false);
-      setTimeout(() => setMessage(null), 3000);
     }
+  }
+
+  async function handleTestConnection() {
+    setTesting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", apiKey: geminiKey }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showMsg("success", `Connected successfully via ${data.model}`);
+      } else {
+        showMsg("error", data.error || "Connection test failed");
+      }
+    } catch {
+      showMsg("error", "Connection test failed");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function handleDeleteKey() {
+    if (!confirm("Delete your Gemini API key? Generation will stop working."))
+      return;
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deleteKey" }),
+      });
+      if (!res.ok) throw new Error();
+      setGeminiKey("");
+      setHasGeminiKey(false);
+      showMsg("success", "API key deleted");
+    } catch {
+      showMsg("error", "Failed to delete key");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-red" />
+      </div>
+    );
   }
 
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <h1 className="text-3xl font-display font-bold mb-2">Settings</h1>
       <p className="text-text-secondary mb-8">
-        Configure your API keys and preferences
+        Configure your API keys and model preferences
       </p>
 
       <div className="space-y-6">
+        {/* Gemini API Key */}
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-1">
             Google Gemini API
@@ -78,50 +152,91 @@ export default function SettingsPage() {
               onClick={() => setShowGemini(!showGemini)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
             >
-              {showGemini ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showGemini ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
             </button>
           </div>
-        </div>
-
-        <div className="card">
-          <h2 className="font-display font-semibold text-lg mb-1">
-            ElevenLabs API (Optional)
-          </h2>
-          <p className="text-text-secondary text-sm mb-4">
-            For AI voiceover generation. Phase 2 feature.
-          </p>
-          <div className="relative">
-            <input
-              type={showElevenLabs ? "text" : "password"}
-              value={elevenLabsKey}
-              onChange={(e) => setElevenLabsKey(e.target.value)}
-              placeholder="Enter your ElevenLabs API key"
-              className="input-field pr-10"
-            />
+          <div className="flex gap-2 mt-3">
             <button
-              type="button"
-              onClick={() => setShowElevenLabs(!showElevenLabs)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+              onClick={handleTestConnection}
+              disabled={testing || (!geminiKey && !hasGeminiKey)}
+              className="btn-secondary text-sm flex items-center gap-2"
             >
-              {showElevenLabs ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {testing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )}
+              {testing ? "Testing..." : "Test Connection"}
             </button>
+            {hasGeminiKey && (
+              <button
+                onClick={handleDeleteKey}
+                className="btn-secondary text-sm flex items-center gap-2 text-error hover:bg-error/10"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete Key
+              </button>
+            )}
           </div>
         </div>
 
+        {/* Model Configuration */}
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-1">
-            Default Voice
+            Model Configuration
           </h2>
           <p className="text-text-secondary text-sm mb-4">
-            Preferred voice for TTS generation
+            Dual-engine architecture: Core handles text reasoning, Visual handles
+            image-related generation. Fallback models activate automatically.
           </p>
-          <input
-            type="text"
-            value={defaultVoice}
-            onChange={(e) => setDefaultVoice(e.target.value)}
-            placeholder="e.g., Rachel, Adam"
-            className="input-field"
-          />
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                Core Engine
+                <span className="text-text-muted font-normal ml-2">
+                  Audio, Timeline, Production, Script Analysis
+                </span>
+              </label>
+              <select
+                value={coreModel}
+                onChange={(e) => setCoreModel(e.target.value)}
+                className="input-field"
+              >
+                {coreModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                    {m === coreModels[0] ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                Visual Engine
+                <span className="text-text-muted font-normal ml-2">
+                  3D Prompts, Media Research, GFX Briefs
+                </span>
+              </label>
+              <select
+                value={visualModel}
+                onChange={(e) => setVisualModel(e.target.value)}
+                className="input-field"
+              >
+                {visualModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                    {m === visualModels[0] ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {message && (

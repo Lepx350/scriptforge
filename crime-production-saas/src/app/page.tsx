@@ -9,6 +9,8 @@ import {
   Search,
   ArrowUpDown,
   Trash2,
+  ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 
 interface Project {
@@ -17,6 +19,7 @@ interface Project {
   status: string;
   inputMethod: string;
   estimatedDurationMinutes: number | null;
+  youtubeUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +41,7 @@ const statusLabel: Record<string, string> = {
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "title" | "status">("date");
 
@@ -48,10 +52,11 @@ export default function Dashboard() {
   async function fetchProjects() {
     try {
       const res = await fetch("/api/projects");
+      if (!res.ok) throw new Error("Failed to load projects");
       const data = await res.json();
       setProjects(data);
-    } catch (error) {
-      console.error("Failed to fetch projects:", error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
       setLoading(false);
     }
@@ -59,15 +64,22 @@ export default function Dashboard() {
 
   async function deleteProject(id: string) {
     if (!confirm("Delete this project? This cannot be undone.")) return;
-    await fetch(`/api/projects?id=${id}`, { method: "DELETE" });
-    setProjects((p) => p.filter((proj) => proj.id !== id));
+    try {
+      const res = await fetch(`/api/projects?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      setProjects((p) => p.filter((proj) => proj.id !== id));
+    } catch {
+      setError("Failed to delete project");
+    }
   }
 
   const filtered = projects
     .filter((p) => p.title.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       if (sortBy === "date")
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       if (sortBy === "title") return a.title.localeCompare(b.title);
       return a.status.localeCompare(b.status);
     });
@@ -81,11 +93,27 @@ export default function Dashboard() {
             {projects.length} project{projects.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link href="/projects/new" className="btn-primary flex items-center gap-2">
+        <Link
+          href="/projects/new"
+          className="btn-primary flex items-center gap-2"
+        >
           <Plus className="w-4 h-4" />
           New Project
         </Link>
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-error/10 text-error text-sm mb-6">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {error}
+          <button
+            onClick={() => setError("")}
+            className="ml-auto text-xs underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-4 mb-6">
         <div className="relative flex-1 max-w-md">
@@ -100,7 +128,13 @@ export default function Dashboard() {
         </div>
         <button
           onClick={() =>
-            setSortBy(sortBy === "date" ? "title" : sortBy === "title" ? "status" : "date")
+            setSortBy(
+              sortBy === "date"
+                ? "title"
+                : sortBy === "title"
+                  ? "status"
+                  : "date"
+            )
           }
           className="btn-secondary flex items-center gap-2 text-sm"
         >
@@ -131,7 +165,10 @@ export default function Dashboard() {
               : "Create your first project to get started"}
           </p>
           {!search && (
-            <Link href="/projects/new" className="btn-primary inline-flex items-center gap-2">
+            <Link
+              href="/projects/new"
+              className="btn-primary inline-flex items-center gap-2"
+            >
               <Plus className="w-4 h-4" />
               Create Project
             </Link>
@@ -160,14 +197,29 @@ export default function Dashboard() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex items-center gap-3 text-sm">
-                <span className={statusBadge[project.status] || "badge-draft"}>
+              <div className="flex items-center gap-3 text-sm flex-wrap">
+                <span
+                  className={statusBadge[project.status] || "badge-draft"}
+                >
                   {statusLabel[project.status] || project.status}
                 </span>
                 {project.estimatedDurationMinutes && (
                   <span className="flex items-center gap-1 text-text-secondary">
                     <Clock className="w-3.5 h-3.5" />
                     {project.estimatedDurationMinutes}m
+                  </span>
+                )}
+                {project.youtubeUrl && (
+                  <span
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(project.youtubeUrl!, "_blank");
+                    }}
+                    className="flex items-center gap-1 text-accent-blue hover:underline cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    YouTube
                   </span>
                 )}
               </div>

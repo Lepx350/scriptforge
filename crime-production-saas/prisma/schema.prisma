@@ -96,9 +96,9 @@ model Analytics {
 }
 
 model Settings {
-  id        String   @id @default("default")
-  geminiKey String?
-  elevenLabsKey String?
-  defaultVoice String?
-  updatedAt DateTime @updatedAt
+  id          String   @id @default("default")
+  geminiKey   String?
+  coreModel   String?
+  visualModel String?
+  updatedAt   DateTime @updatedAt
 }

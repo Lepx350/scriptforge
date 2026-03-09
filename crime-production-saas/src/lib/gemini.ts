@@ -1,46 +1,145 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import prisma from "./prisma";
 
+// Dual-engine model architecture
+const MODEL_CHAINS = {
+  core: [
+    "gemini-3.1-pro-preview",
+    "gemini-3-pro-preview",
+    "gemini-2.5-pro",
+  ],
+  visual: [
+    "gemini-3-pro-image-preview",
+    "gemini-3.1-flash-image-preview",
+    "gemini-2.5-flash-image-preview",
+  ],
+} as const;
+
+export type ModelPurpose = "core" | "visual";
+
+async function getSettings() {
+  return prisma.settings.findUnique({ where: { id: "default" } });
+}
+
 async function getGeminiKey(): Promise<string> {
-  const settings = await prisma.settings.findUnique({ where: { id: "default" } });
+  const settings = await getSettings();
   if (!settings?.geminiKey) {
     throw new Error("Gemini API key not configured. Please add your API key in Settings.");
   }
   return settings.geminiKey;
 }
 
-async function getModel(systemInstruction?: string) {
-  const apiKey = await getGeminiKey();
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({
-    model: "gemini-2.5-pro-preview-05-06",
-    systemInstruction,
-  });
+async function getModelOverrides(): Promise<{ coreModel?: string; visualModel?: string }> {
+  const settings = await getSettings();
+  return {
+    coreModel: settings?.coreModel || undefined,
+    visualModel: settings?.visualModel || undefined,
+  };
+}
+
+function getModelChain(
+  purpose: ModelPurpose,
+  overrides: { coreModel?: string; visualModel?: string }
+): string[] {
+  const override = purpose === "core" ? overrides.coreModel : overrides.visualModel;
+  if (override) {
+    return [override, ...MODEL_CHAINS[purpose].filter((m) => m !== override)];
+  }
+  return [...MODEL_CHAINS[purpose]];
 }
 
 async function generateWithRetry(
   systemPrompt: string,
   userPrompt: string,
-  maxRetries = 3
+  purpose: ModelPurpose = "core",
+  maxRetries = 2
 ): Promise<string> {
-  const model = await getModel(systemPrompt);
+  const apiKey = await getGeminiKey();
+  const overrides = await getModelOverrides();
+  const models = getModelChain(purpose, overrides);
+  const genAI = new GoogleGenerativeAI(apiKey);
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const result = await model.generateContent(userPrompt);
-      return result.response.text();
-    } catch (error) {
-      lastError = error as Error;
-      if (attempt < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 1000));
+  for (const modelName of models) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+        });
+        const result = await model.generateContent(userPrompt);
+        console.log(`[Gemini] ${purpose} generation succeeded: ${modelName}`);
+        return result.response.text();
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(
+          `[Gemini] ${modelName} attempt ${attempt + 1} failed:`,
+          (error as Error).message
+        );
+        if (attempt < maxRetries - 1) {
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 1000));
+        }
       }
     }
   }
-  throw lastError;
+
+  throw new Error(
+    `All Gemini models failed for ${purpose}. Last error: ${lastError?.message}`
+  );
 }
 
-// System prompts for each pipeline pass
+async function* streamGeneration(
+  systemPrompt: string,
+  userPrompt: string,
+  purpose: ModelPurpose = "core"
+): AsyncGenerator<string> {
+  const apiKey = await getGeminiKey();
+  const overrides = await getModelOverrides();
+  const models = getModelChain(purpose, overrides);
+  const genAI = new GoogleGenerativeAI(apiKey);
+  let lastError: Error | null = null;
+
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemPrompt,
+      });
+      const result = await model.generateContentStream(userPrompt);
+      console.log(`[Gemini] Streaming ${purpose} with: ${modelName}`);
+
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) yield text;
+      }
+      return;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`[Gemini] Stream failed for ${modelName}:`, (error as Error).message);
+    }
+  }
+
+  throw new Error(
+    `All Gemini models failed for ${purpose} streaming. Last error: ${lastError?.message}`
+  );
+}
+
+async function testConnection(
+  apiKey: string
+): Promise<{ success: boolean; error?: string; model?: string }> {
+  for (const modelName of MODEL_CHAINS.core) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      await model.generateContent("Say 'ok'");
+      return { success: true, model: modelName };
+    } catch {
+      continue;
+    }
+  }
+  return { success: false, error: "Could not connect to any Gemini model. Check your API key." };
+}
+
 const SYSTEM_PROMPTS = {
   visualAnalysis: `You are a video production director specializing in true crime and investigative YouTube content. Your job is to read a narration script and add visual direction tags for every section.
 
@@ -177,4 +276,4 @@ TAGS: [comma-separated tags]
 ---END_PACKAGE---`,
 };
 
-export { generateWithRetry, SYSTEM_PROMPTS, getGeminiKey };
+export { generateWithRetry, streamGeneration, testConnection, SYSTEM_PROMPTS, getGeminiKey, MODEL_CHAINS };

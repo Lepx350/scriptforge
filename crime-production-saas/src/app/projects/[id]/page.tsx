@@ -25,6 +25,9 @@ import {
   ExternalLink,
   FileDown,
   Archive,
+  Copy,
+  ImagePlus,
+  Maximize2,
 } from "lucide-react";
 
 // ─── Interfaces ───
@@ -36,6 +39,8 @@ interface VisualDirection {
   layerType: string;
   directionText: string;
   aiPrompt?: string;
+  imageUrl?: string;
+  imageBase64?: string;
   mediaLinks?: string;
   gfxSpecs?: string;
 }
@@ -804,8 +809,68 @@ function VisualTab({
   onRefresh: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<Record<string, string>>({});
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editedPrompt, setEditedPrompt] = useState("");
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const edit = useInlineEdit("visual", onRefresh);
   const regen = useSectionRegen(projectId, onRefresh);
+
+  const getImageSrc = (dir: VisualDirection): string | null => {
+    if (dir.imageUrl) return dir.imageUrl;
+    if (dir.imageBase64) return `data:image/png;base64,${dir.imageBase64}`;
+    return null;
+  };
+
+  const generateImage = async (dir: VisualDirection, promptOverride?: string) => {
+    const prompt = promptOverride || dir.aiPrompt;
+    if (!prompt) return;
+
+    setGeneratingImageId(dir.id);
+    setImageError((prev) => ({ ...prev, [dir.id]: "" }));
+
+    try {
+      const res = await fetch("/api/generate/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visualDirectionId: dir.id,
+          prompt,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setImageError((prev) => ({ ...prev, [dir.id]: data.error || "Image generation failed" }));
+        return;
+      }
+
+      setEditingPromptId(null);
+      onRefresh();
+    } catch {
+      setImageError((prev) => ({
+        ...prev,
+        [dir.id]: "Network error — please try again",
+      }));
+    } finally {
+      setGeneratingImageId(null);
+    }
+  };
+
+  const copyPrompt = async (prompt: string, id: string) => {
+    await navigator.clipboard.writeText(prompt);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const downloadImage = (src: string, name: string) => {
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = `${name}.png`;
+    a.click();
+  };
 
   if (directions.length === 0) {
     return (
@@ -827,6 +892,27 @@ function VisualTab({
 
   return (
     <div className="max-w-5xl space-y-6">
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8 cursor-pointer"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Full size preview"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-display font-semibold">
           Visual Direction
@@ -866,6 +952,11 @@ function VisualTab({
         const isExpanded = expandedId === dir.id;
         const isEditing = edit.editingId === dir.id;
         const isRegenerating = regen.regenId === dir.id;
+        const is3D = dir.layerType === "3d";
+        const imageSrc = getImageSrc(dir);
+        const isGeneratingImage = generatingImageId === dir.id;
+        const isEditingPrompt = editingPromptId === dir.id;
+        const dirImageError = imageError[dir.id];
 
         return (
           <div
@@ -890,6 +981,11 @@ function VisualTab({
                     <span className="text-text-muted text-xs">
                       Section {dir.sectionIndex + 1}
                     </span>
+                    {is3D && imageSrc && (
+                      <span className="badge bg-green-500/20 text-green-400 text-xs">
+                        Image Ready
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-text-secondary line-clamp-2">
                     {dir.scriptText}
@@ -905,7 +1001,7 @@ function VisualTab({
 
             {isExpanded && (
               <div className="mt-4 pt-4 border-t border-border space-y-3">
-                {/* Action buttons */}
+                {/* Action buttons for non-3D cards (unchanged) */}
                 <div className="flex gap-2 justify-end">
                   {isEditing ? (
                     <>
@@ -975,7 +1071,174 @@ function VisualTab({
                     className="text-sm"
                   />
                 </div>
-                {(dir.aiPrompt || isEditing) && (
+
+                {/* ─── 3D Scene Image Section ─── */}
+                {is3D && (
+                  <div className="space-y-3">
+                    {/* Generated image preview */}
+                    {imageSrc && (
+                      <div>
+                        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+                          Generated Image
+                        </h4>
+                        <div className="relative group">
+                          <img
+                            src={imageSrc}
+                            alt={`Scene ${dir.sectionIndex + 1}`}
+                            className="w-full max-h-96 object-contain rounded-lg bg-black/40 cursor-pointer"
+                            onClick={() => setLightboxSrc(imageSrc)}
+                          />
+                          <button
+                            onClick={() => setLightboxSrc(imageSrc)}
+                            className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-lg text-white/70 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="View full size"
+                          >
+                            <Maximize2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Image generation loading state */}
+                    {isGeneratingImage && (
+                      <div className="flex items-center gap-3 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                        <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                        <span className="text-sm text-purple-300">
+                          Generating image... this may take 10-30 seconds
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Image error state */}
+                    {dirImageError && !isGeneratingImage && (
+                      <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-red-300">{dirImageError}</p>
+                          <button
+                            onClick={() => generateImage(dir)}
+                            className="text-xs text-red-400 hover:text-red-300 mt-1 underline"
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Prompt display / edit */}
+                    <div>
+                      <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+                        AI Image Prompt
+                      </h4>
+                      {isEditingPrompt ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editedPrompt}
+                            onChange={(e) => setEditedPrompt(e.target.value)}
+                            className="w-full bg-bg-secondary border border-border rounded-lg p-3 text-sm font-mono text-purple-300 resize-y min-h-[80px] focus:outline-none focus:border-purple-500/50"
+                            rows={4}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => generateImage(dir, editedPrompt)}
+                              disabled={isGeneratingImage || !editedPrompt.trim()}
+                              className="btn-primary text-xs flex items-center gap-1"
+                            >
+                              <ImagePlus className="w-3 h-3" />
+                              Generate Image
+                            </button>
+                            <button
+                              onClick={() => setEditingPromptId(null)}
+                              className="btn-secondary text-xs"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {dir.aiPrompt ? (
+                            <div className="bg-bg-secondary rounded-lg p-3">
+                              <code className="text-sm font-mono text-purple-300 whitespace-pre-wrap">
+                                {dir.aiPrompt}
+                              </code>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-text-muted italic">
+                              No prompt generated yet
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* 3D action buttons */}
+                    {!isEditingPrompt && dir.aiPrompt && (
+                      <div className="flex flex-wrap gap-2">
+                        {!imageSrc ? (
+                          <button
+                            onClick={() => generateImage(dir)}
+                            disabled={isGeneratingImage}
+                            className="btn-primary text-xs flex items-center gap-1.5"
+                          >
+                            {isGeneratingImage ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <ImagePlus className="w-3.5 h-3.5" />
+                            )}
+                            Generate Image
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => downloadImage(imageSrc, `scene-${dir.sectionIndex + 1}`)}
+                              className="btn-secondary text-xs flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              Download
+                            </button>
+                            <button
+                              onClick={() => generateImage(dir)}
+                              disabled={isGeneratingImage}
+                              className="btn-secondary text-xs flex items-center gap-1.5"
+                            >
+                              {isGeneratingImage ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              )}
+                              Regenerate
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => copyPrompt(dir.aiPrompt!, dir.id)}
+                          className="btn-secondary text-xs flex items-center gap-1.5"
+                        >
+                          {copiedId === dir.id ? (
+                            <Check className="w-3.5 h-3.5 text-green-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                          {copiedId === dir.id ? "Copied" : "Copy Prompt"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingPromptId(dir.id);
+                            setEditedPrompt(dir.aiPrompt || "");
+                          }}
+                          className="btn-secondary text-xs flex items-center gap-1.5"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit Prompt
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Non-3D: AI prompt display (unchanged) */}
+                {!is3D && (dir.aiPrompt || isEditing) && (
                   <div>
                     <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
                       AI Image Prompt

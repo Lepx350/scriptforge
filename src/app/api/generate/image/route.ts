@@ -6,6 +6,8 @@ import { getGeminiKey } from "@/lib/gemini";
 const IMAGE_MODEL = "gemini-3-pro-image-preview";
 const IMAGE_TIMEOUT_MS = 55_000;
 
+const FERN_STYLE_PREFIX = `3D rendered cinematic documentary scene. Faceless humanoid characters with smooth, featureless mannequin-like heads — no facial features, no eyes, no mouth. Stylized but realistic body proportions. Highly detailed 3D environment with realistic textures and materials. Cinematic camera angle with shallow depth of field. Desaturated color palette — muted tones, low saturation, slight teal-and-orange color grade. Dramatic single-source lighting with volumetric light rays and strong shadows. Moody, atmospheric, noir-documentary feel. Characters should be performing contextual actions (not standing still). Photorealistic rendering quality, Blender/Unreal Engine aesthetic.`;
+
 export async function POST(request: NextRequest) {
   try {
     const { visualDirectionId, prompt } = (await request.json()) as {
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
       } as Record<string, unknown>,
     });
 
-    const imagePrompt = `Generate a cinematic image for a true crime video scene: ${prompt}`;
+    const imagePrompt = `${FERN_STYLE_PREFIX}\n\nScene: ${prompt}`;
 
     const resultPromise = model.generateContent(imagePrompt);
     const timeoutPromise = new Promise<never>((_, reject) =>

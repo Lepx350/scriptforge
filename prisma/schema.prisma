@@ -34,6 +34,8 @@ model VisualDirection {
   layerType      String   // 3d, media, gfx
   directionText  String   @db.Text
   aiPrompt       String?  @db.Text
+  imageUrl       String?  // Vercel Blob URL for generated image
+  imageBase64    String?  @db.Text // Base64 fallback if blob storage unavailable
   mediaLinks     String?  @db.Text // JSON string
   gfxSpecs       String?  @db.Text // JSON string
   createdAt      DateTime @default(now())

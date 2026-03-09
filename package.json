@@ -21,6 +21,7 @@
     "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^25.4.0",
     "@types/react": "^19.2.14",
+    "@vercel/blob": "^2.3.1",
     "autoprefixer": "^10.4.27",
     "lucide-react": "^0.577.0",
     "mammoth": "^1.11.0",

@@ -11,6 +11,7 @@ import {
   Trash2,
   ExternalLink,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 interface Project {
@@ -44,6 +45,8 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "title" | "status">("date");
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -62,14 +65,18 @@ export default function Dashboard() {
     }
   }
 
-  async function deleteProject(id: string) {
-    if (!confirm("Delete this project? This cannot be undone.")) return;
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/projects?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/projects?id=${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
-      setProjects((p) => p.filter((proj) => proj.id !== id));
+      setProjects((p) => p.filter((proj) => proj.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch {
       setError("Failed to delete project");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -85,11 +92,36 @@ export default function Dashboard() {
     });
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display font-semibold text-lg mb-2">Delete Project?</h3>
+            <p className="text-text-secondary text-sm mb-4">
+              This will permanently delete &ldquo;{deleteTarget.title}&rdquo; and all generated content. This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="btn-secondary text-sm">
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="bg-error hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+              >
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-6 md:mb-8">
         <div>
-          <h1 className="text-3xl font-display font-bold">Dashboard</h1>
-          <p className="text-text-secondary mt-1">
+          <h1 className="text-2xl md:text-3xl font-display font-bold">Dashboard</h1>
+          <p className="text-text-secondary mt-1 text-sm">
             {projects.length} project{projects.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -98,7 +130,8 @@ export default function Dashboard() {
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          New Project
+          <span className="hidden md:inline">New Project</span>
+          <span className="md:hidden">New</span>
         </Link>
       </div>
 
@@ -115,7 +148,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-2 md:gap-4 mb-6">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
@@ -139,7 +172,8 @@ export default function Dashboard() {
           className="btn-secondary flex items-center gap-2 text-sm"
         >
           <ArrowUpDown className="w-4 h-4" />
-          Sort: {sortBy}
+          <span className="hidden md:inline">Sort: {sortBy}</span>
+          <span className="md:hidden">{sortBy}</span>
         </button>
       </div>
 
@@ -190,9 +224,9 @@ export default function Dashboard() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    deleteProject(project.id);
+                    setDeleteTarget(project);
                   }}
-                  className="text-text-muted hover:text-error transition-colors p-1 opacity-0 group-hover:opacity-100"
+                  className="text-text-muted hover:text-error transition-colors p-2 md:p-1 md:opacity-0 md:group-hover:opacity-100 shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

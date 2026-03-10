@@ -26,6 +26,8 @@ body {
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   font-family: var(--font-body);
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -35,6 +37,7 @@ h1, h2, h3, h4, h5, h6 {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Component classes */
@@ -45,9 +48,14 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   transition: background-color 0.2s;
+  min-height: 36px;
 }
 .btn-primary:hover {
   background-color: var(--color-accent-red-hover);
+}
+.btn-primary:active {
+  background-color: var(--color-accent-red-hover);
+  transform: scale(0.98);
 }
 .btn-primary:disabled {
   opacity: 0.6;
@@ -62,9 +70,14 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   transition: background-color 0.2s;
+  min-height: 36px;
 }
 .btn-secondary:hover {
   background-color: var(--color-bg-card-hover);
+}
+.btn-secondary:active {
+  background-color: var(--color-bg-card-hover);
+  transform: scale(0.98);
 }
 
 .card {
@@ -82,6 +95,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--color-text-primary);
   transition: border-color 0.2s;
   width: 100%;
+  min-height: 36px;
 }
 .input-field::placeholder {
   color: var(--color-text-muted);
@@ -117,4 +131,65 @@ h1, h2, h3, h4, h5, h6 {
 .badge-published {
   background-color: rgb(16 185 129 / 0.2);
   color: var(--color-success);
+}
+
+/* ─── Mobile (below 768px) ─── */
+@media (max-width: 767px) {
+  .btn-primary,
+  .btn-secondary {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .input-field {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  body {
+    font-size: 15px;
+  }
+
+  h1 { font-size: 24px !important; }
+  h2 { font-size: 20px !important; }
+  h3 { font-size: 17px !important; }
+}
+
+/* Hide scrollbar */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-content {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  max-width: 400px;
+  width: 100%;
 }

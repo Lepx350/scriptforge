@@ -27,7 +27,9 @@ import {
   Archive,
   Copy,
   ImagePlus,
+  Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   ImageGenerationPanel,
   type ImageGenSettings,
@@ -351,11 +353,14 @@ export default function ProjectWorkspace({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("script");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -446,6 +451,19 @@ export default function ProjectWorkspace({
     }
   }
 
+  async function handleDeleteProject() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete project");
+      router.push("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete project");
+      setDeleting(false);
+      setShowDeleteModal(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -473,21 +491,50 @@ export default function ProjectWorkspace({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => !deleting && setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display font-semibold text-lg mb-2">Delete Project?</h3>
+            <p className="text-text-secondary text-sm mb-4">
+              This will permanently delete &ldquo;{project.title}&rdquo; and all generated content. This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                className="btn-secondary text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteProject}
+                disabled={deleting}
+                className="bg-error hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+              >
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-bg-secondary border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-bg-secondary border-b border-border px-4 md:px-6 py-3 md:py-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-display font-bold">{project.title}</h1>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <h1 className="text-xl md:text-2xl font-display font-bold">{project.title}</h1>
+            <div className="flex items-center gap-2 md:gap-3 mt-1 flex-wrap text-sm">
               <span className={statusBadge[project.status] || "badge-draft"}>
                 {statusLabel[project.status] || project.status}
               </span>
               {project.estimatedDurationMinutes && (
-                <span className="text-text-secondary text-sm">
+                <span className="text-text-secondary">
                   ~{project.estimatedDurationMinutes} min
                 </span>
               )}
-              <span className="text-text-muted text-sm">
+              <span className="text-text-muted">
                 {project.inputScript.split(/\s+/).filter(Boolean).length} words
               </span>
               {project.youtubeUrl && (
@@ -495,7 +542,7 @@ export default function ProjectWorkspace({
                   href={project.youtubeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-blue text-sm flex items-center gap-1 hover:underline"
+                  className="text-accent-blue flex items-center gap-1 hover:underline"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   YouTube
@@ -512,7 +559,7 @@ export default function ProjectWorkspace({
             <button
               onClick={() => runGeneration("all")}
               disabled={isGenerating}
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex items-center gap-2 flex-1 md:flex-none justify-center"
             >
               {generating === "all" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -521,11 +568,18 @@ export default function ProjectWorkspace({
               )}
               {generating === "all" ? "Generating..." : "Generate All"}
             </button>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="text-text-muted hover:text-error transition-colors p-2 md:p-1"
+              title="Delete project"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-4 -mb-4 overflow-x-auto">
+        <div className="flex gap-1 mt-4 -mb-4 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -545,7 +599,7 @@ export default function ProjectWorkspace({
 
       {/* Error / Stream Error Banner */}
       {(error || streamError) && (
-        <div className="mx-6 mt-4 flex items-center gap-2 p-3 rounded-lg bg-error/10 text-error text-sm">
+        <div className="mx-4 md:mx-6 mt-4 flex items-center gap-2 p-3 rounded-lg bg-error/10 text-error text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span className="flex-1">{error || streamError}</span>
           <button
@@ -562,7 +616,7 @@ export default function ProjectWorkspace({
 
       {/* Streaming Preview */}
       {streamingModule && (
-        <div className="mx-6 mt-4 card">
+        <div className="mx-4 md:mx-6 mt-4 card">
           <div className="flex items-center gap-2 mb-3">
             <Loader2 className="w-4 h-4 animate-spin text-accent-red" />
             <span className="text-sm font-medium">
@@ -576,10 +630,10 @@ export default function ProjectWorkspace({
       )}
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <ErrorBoundary onReset={fetchProject}>
           {activeTab === "script" && (
-            <ScriptTab script={project.inputScript} />
+            <ScriptTab script={project.inputScript} projectId={id} onRefresh={fetchProject} />
           )}
         </ErrorBoundary>
         <ErrorBoundary onReset={() => runGeneration("visual")}>
@@ -724,16 +778,72 @@ function StatusActions({
 
 // ─── Script Tab ───
 
-function ScriptTab({ script }: { script: string }) {
+function ScriptTab({ script, projectId, onRefresh }: { script: string; projectId: string; onRefresh: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [editedScript, setEditedScript] = useState(script);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputScript: editedScript }),
+      });
+      if (!res.ok) throw new Error("Failed to save script");
+      onRefresh();
+      setEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl">
-      <h2 className="text-lg font-display font-semibold mb-4">
-        Original Script
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-display font-semibold">Original Script</h2>
+        <div className="flex gap-2">
+          {editing ? (
+            <>
+              <button onClick={handleSave} disabled={saving} className="btn-primary text-xs flex items-center gap-1.5">
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {saving ? "Saving..." : "Save"}
+              </button>
+              <button onClick={() => { setEditing(false); setEditedScript(script); setSaveError(""); }} className="btn-secondary text-xs flex items-center gap-1.5">
+                <X className="w-3.5 h-3.5" /> Cancel
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setEditing(true)} className="btn-secondary text-xs flex items-center gap-1.5">
+              <Pencil className="w-3.5 h-3.5" /> Edit Script
+            </button>
+          )}
+        </div>
+      </div>
+      {saveError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1 mb-3">{saveError}</div>
+      )}
+      {editing && (
+        <p className="text-xs text-warning mb-2">Editing the script will not automatically re-generate modules. You&apos;ll need to regenerate each module after saving.</p>
+      )}
       <div className="card">
-        <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-text-primary">
-          {script}
-        </pre>
+        {editing ? (
+          <textarea
+            value={editedScript}
+            onChange={(e) => setEditedScript(e.target.value)}
+            className="w-full bg-transparent font-mono text-sm leading-relaxed text-text-primary resize-y min-h-[300px] focus:outline-none"
+            rows={20}
+          />
+        ) : (
+          <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-text-primary">
+            {script}
+          </pre>
+        )}
       </div>
     </div>
   );
@@ -1286,8 +1396,8 @@ function AudioTab({
 
         return (
           <div key={dir.id} className="card">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-2">
+              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                 <Volume2 className="w-5 h-5 text-accent-blue" />
                 <span className="text-text-muted text-sm">
                   Section {dir.sectionIndex + 1}
@@ -1507,8 +1617,8 @@ function TimelineTab({
               </div>
 
               <div className="card flex-1 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                     <span className="font-mono text-accent-red text-sm font-semibold">
                       {seg.startTime}
                     </span>
@@ -1626,6 +1736,15 @@ function ProductionTab({
 }) {
   const edit = useInlineEdit("production", onRefresh);
   const [thumbImages, setThumbImages] = useState<Record<number, string>>({});
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch { /* ignore */ }
+  };
 
   if (!pkg) {
     return (
@@ -1835,9 +1954,18 @@ function ProductionTab({
 
       {/* Description */}
       <div className="card">
-        <h3 className="font-display font-semibold mb-3">
-          YouTube Description
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display font-semibold">YouTube Description</h3>
+          {!isEditing && resolvedDescription && (
+            <button
+              onClick={() => copyToClipboard(resolvedDescription, "description")}
+              className="btn-secondary text-xs flex items-center gap-1.5"
+            >
+              {copiedField === "description" ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedField === "description" ? "Copied" : "Copy"}
+            </button>
+          )}
+        </div>
         {isEditing ? (
           <textarea
             value={edit.editData.description ?? pkg.description ?? ""}
@@ -1859,7 +1987,18 @@ function ProductionTab({
 
       {/* Tags */}
       <div className="card">
-        <h3 className="font-display font-semibold mb-3">Tags</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display font-semibold">Tags</h3>
+          {!isEditing && pkg.tags && (
+            <button
+              onClick={() => copyToClipboard(pkg.tags || "", "tags")}
+              className="btn-secondary text-xs flex items-center gap-1.5"
+            >
+              {copiedField === "tags" ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedField === "tags" ? "Copied" : "Copy"}
+            </button>
+          )}
+        </div>
         {isEditing ? (
           <textarea
             value={edit.editData.tags ?? pkg.tags ?? ""}

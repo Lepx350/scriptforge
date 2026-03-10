@@ -27,8 +27,12 @@ import {
   Archive,
   Copy,
   ImagePlus,
-  Maximize2,
 } from "lucide-react";
+import {
+  ImageGenerationPanel,
+  type ImageGenSettings,
+  type GeneratedImage,
+} from "@/components/ImageGenerationControls";
 
 // ─── Interfaces ───
 
@@ -634,6 +638,7 @@ export default function ProjectWorkspace({
               }
               onGenerate={() => runGeneration("production")}
               onRefresh={fetchProject}
+              timelineSegments={project.timelineSegments}
             />
           )}
         </ErrorBoundary>
@@ -820,11 +825,8 @@ function VisualTab({
   onRefresh: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<Record<string, string>>({});
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editedPrompt, setEditedPrompt] = useState("");
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const edit = useInlineEdit("visual", onRefresh);
   const regen = useSectionRegen(projectId, onRefresh);
@@ -835,39 +837,52 @@ function VisualTab({
     return null;
   };
 
-  const generateImage = async (dir: VisualDirection, promptOverride?: string) => {
+  const handleGenerate = async (
+    dir: VisualDirection,
+    settings: ImageGenSettings,
+    promptOverride?: string,
+  ): Promise<GeneratedImage[]> => {
     const prompt = promptOverride || dir.aiPrompt;
-    if (!prompt) return;
+    if (!prompt) throw new Error("No prompt available");
 
-    setGeneratingImageId(dir.id);
-    setImageError((prev) => ({ ...prev, [dir.id]: "" }));
+    const res = await fetch("/api/generate/image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        visualDirectionId: dir.id,
+        prompt,
+        model: settings.model,
+        quality: settings.quality,
+        aspectRatio: settings.aspectRatio,
+        variations: settings.variations,
+      }),
+    });
 
-    try {
-      const res = await fetch("/api/generate/image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          visualDirectionId: dir.id,
-          prompt,
-        }),
-      });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Image generation failed");
 
-      const data = await res.json();
-      if (!res.ok) {
-        setImageError((prev) => ({ ...prev, [dir.id]: data.error || "Image generation failed" }));
-        return;
-      }
-
-      setEditingPromptId(null);
+    if (data.autoSaved) {
       onRefresh();
-    } catch {
-      setImageError((prev) => ({
-        ...prev,
-        [dir.id]: "Network error — please try again",
-      }));
-    } finally {
-      setGeneratingImageId(null);
     }
+
+    return data.images || [];
+  };
+
+  const handleSaveSelected = async (dir: VisualDirection, imageUrl: string) => {
+    const res = await fetch("/api/generate/image", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        visualDirectionId: dir.id,
+        imageUrl,
+        prompt: dir.aiPrompt,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to save");
+    }
+    onRefresh();
   };
 
   const copyPrompt = async (prompt: string, id: string) => {
@@ -875,24 +890,7 @@ function VisualTab({
       await navigator.clipboard.writeText(prompt);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      setImageError((prev) => ({
-        ...prev,
-        [id]: "Failed to copy to clipboard",
-      }));
-    }
-  };
-
-  const downloadImage = (src: string, name: string) => {
-    try {
-      const a = document.createElement("a");
-      a.href = src;
-      a.download = `${name}.png`;
-      a.click();
-    } catch {
-      // Download fallback — open in new tab
-      window.open(src, "_blank");
-    }
+    } catch { /* ignore */ }
   };
 
   if (directions.length === 0) {
@@ -915,35 +913,6 @@ function VisualTab({
 
   return (
     <div className="max-w-5xl space-y-6">
-      {/* Lightbox */}
-      {lightboxSrc && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Image preview"
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8 cursor-pointer"
-          onClick={() => setLightboxSrc(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setLightboxSrc(null);
-          }}
-        >
-          <button
-            onClick={() => setLightboxSrc(null)}
-            className="absolute top-4 right-4 text-white/70 hover:text-white"
-            aria-label="Close image preview"
-            title="Close (Esc)"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <img
-            src={lightboxSrc}
-            alt="Full size preview"
-            className="max-w-full max-h-full object-contain rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
-
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-display font-semibold">
           Visual Direction
@@ -985,9 +954,7 @@ function VisualTab({
         const isRegenerating = regen.regenId === dir.id;
         const is3D = dir.layerType === "3d";
         const imageSrc = getImageSrc(dir);
-        const isGeneratingImage = generatingImageId === dir.id;
         const isEditingPrompt = editingPromptId === dir.id;
-        const dirImageError = imageError[dir.id];
 
         return (
           <div
@@ -1119,56 +1086,6 @@ function VisualTab({
                 {/* ─── 3D Scene Image Section ─── */}
                 {is3D && (
                   <div className="space-y-3">
-                    {/* Generated image preview */}
-                    {imageSrc && (
-                      <div>
-                        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
-                          Generated Image
-                        </h4>
-                        <div className="relative group">
-                          <img
-                            src={imageSrc}
-                            alt={`Scene ${dir.sectionIndex + 1}`}
-                            className="w-full max-h-96 object-contain rounded-lg bg-black/40 cursor-pointer"
-                            onClick={() => setLightboxSrc(imageSrc)}
-                          />
-                          <button
-                            onClick={() => setLightboxSrc(imageSrc)}
-                            className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-lg text-white/70 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="View full size"
-                          >
-                            <Maximize2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Image generation loading state */}
-                    {isGeneratingImage && (
-                      <div className="flex items-center gap-3 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                        <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
-                        <span className="text-sm text-purple-300">
-                          Generating image... this may take 10-30 seconds
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Image error state */}
-                    {dirImageError && !isGeneratingImage && (
-                      <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm text-red-300">{dirImageError}</p>
-                          <button
-                            onClick={() => generateImage(dir)}
-                            className="text-xs text-red-400 hover:text-red-300 mt-1 underline"
-                          >
-                            Try again
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Prompt display / edit */}
                     <div>
                       <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
@@ -1182,22 +1099,12 @@ function VisualTab({
                             className="w-full bg-bg-secondary border border-border rounded-lg p-3 text-sm font-mono text-purple-300 resize-y min-h-[80px] focus:outline-none focus:border-purple-500/50"
                             rows={4}
                           />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => generateImage(dir, editedPrompt)}
-                              disabled={isGeneratingImage || !editedPrompt.trim()}
-                              className="btn-primary text-xs flex items-center gap-1"
-                            >
-                              <ImagePlus className="w-3 h-3" />
-                              Generate Image
-                            </button>
-                            <button
-                              onClick={() => setEditingPromptId(null)}
-                              className="btn-secondary text-xs"
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => setEditingPromptId(null)}
+                            className="btn-secondary text-xs"
+                          >
+                            Cancel
+                          </button>
                         </div>
                       ) : (
                         <>
@@ -1216,45 +1123,9 @@ function VisualTab({
                       )}
                     </div>
 
-                    {/* 3D action buttons */}
+                    {/* Prompt action buttons */}
                     {!isEditingPrompt && dir.aiPrompt && (
                       <div className="flex flex-wrap gap-2">
-                        {!imageSrc ? (
-                          <button
-                            onClick={() => generateImage(dir)}
-                            disabled={isGeneratingImage}
-                            className="btn-primary text-xs flex items-center gap-1.5"
-                          >
-                            {isGeneratingImage ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <ImagePlus className="w-3.5 h-3.5" />
-                            )}
-                            Generate Image
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => downloadImage(imageSrc, `scene-${dir.sectionIndex + 1}`)}
-                              className="btn-secondary text-xs flex items-center gap-1.5"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              Download
-                            </button>
-                            <button
-                              onClick={() => generateImage(dir)}
-                              disabled={isGeneratingImage}
-                              className="btn-secondary text-xs flex items-center gap-1.5"
-                            >
-                              {isGeneratingImage ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <RefreshCw className="w-3.5 h-3.5" />
-                              )}
-                              Regenerate
-                            </button>
-                          </>
-                        )}
                         <button
                           onClick={() => copyPrompt(dir.aiPrompt!, dir.id)}
                           className="btn-secondary text-xs flex items-center gap-1.5"
@@ -1277,6 +1148,18 @@ function VisualTab({
                           Edit Prompt
                         </button>
                       </div>
+                    )}
+
+                    {/* Image generation panel */}
+                    {dir.aiPrompt && (
+                      <ImageGenerationPanel
+                        prompt={isEditingPrompt ? editedPrompt : dir.aiPrompt}
+                        existingImageUrl={imageSrc}
+                        entityId={dir.id}
+                        entityType="visual"
+                        onGenerate={(settings) => handleGenerate(dir, settings, isEditingPrompt ? editedPrompt : undefined)}
+                        onSaveSelected={(imageUrl) => handleSaveSelected(dir, imageUrl)}
+                      />
                     )}
                   </div>
                 )}
@@ -1495,6 +1378,36 @@ function AudioTab({
                   isEditing={isEditing}
                   className="text-sm font-mono"
                 />
+                {/* Music search links */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <a
+                    href={`https://www.epidemicsound.com/music/search/?term=${encodeURIComponent(dir.musicSearchTerms)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-primary border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary hover:border-purple-500/40 transition-colors"
+                  >
+                    <span>🎵</span> Epidemic Sound
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href={`https://artlist.io/royalty-free-music?search=${encodeURIComponent(dir.musicSearchTerms)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-primary border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary hover:border-purple-500/40 transition-colors"
+                  >
+                    <span>🎵</span> Artlist
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="https://studio.youtube.com/channel/UC/music"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-primary border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary hover:border-purple-500/40 transition-colors"
+                  >
+                    <span>🎵</span> YouTube Audio
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               {(dir.sfxCues || isEditing) && (
                 <div className="bg-bg-secondary rounded-lg p-3">
@@ -1703,13 +1616,16 @@ function ProductionTab({
   generating,
   onGenerate,
   onRefresh,
+  timelineSegments,
 }: {
   pkg: ProductionPackage | null;
   generating: boolean;
   onGenerate: () => void;
   onRefresh: () => void;
+  timelineSegments: TimelineSegment[];
 }) {
   const edit = useInlineEdit("production", onRefresh);
+  const [thumbImages, setThumbImages] = useState<Record<number, string>>({});
 
   if (!pkg) {
     return (
@@ -1737,7 +1653,55 @@ function ProductionTab({
     thumbnails = [];
   }
 
+  // Replace [Timestamp] placeholders with real times from timeline
+  const resolveTimestamps = (description: string): string => {
+    if (!description) return description;
+    if (timelineSegments.length === 0) {
+      return description.replace(
+        /\[Timestamp\]/gi,
+        "Timestamps will appear after timeline generation"
+      );
+    }
+    // Replace each [Timestamp] with the next timeline segment's start time
+    let segIdx = 0;
+    return description.replace(/\[Timestamp\]/gi, () => {
+      if (segIdx < timelineSegments.length) {
+        return timelineSegments[segIdx++].startTime;
+      }
+      return "00:00";
+    });
+  };
+
+  const handleThumbGenerate = async (
+    thumbIndex: number,
+    concept: string,
+    textOverlay: string | undefined,
+    settings: ImageGenSettings,
+  ): Promise<GeneratedImage[]> => {
+    const prompt = `${concept}${textOverlay ? `. Text overlay: "${textOverlay}"` : ""}`;
+    const res = await fetch("/api/generate/image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        model: settings.model,
+        quality: settings.quality,
+        aspectRatio: settings.aspectRatio,
+        variations: settings.variations,
+        thumbnailMode: true,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Image generation failed");
+    return data.images || [];
+  };
+
+  const handleThumbSave = async (thumbIndex: number, imageUrl: string) => {
+    setThumbImages((prev) => ({ ...prev, [thumbIndex]: imageUrl }));
+  };
+
   const isEditing = edit.editingId === pkg.id;
+  const resolvedDescription = resolveTimestamps(pkg.description || "");
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -1835,15 +1799,34 @@ function ProductionTab({
                 key={i}
                 className="bg-bg-secondary rounded-lg p-4 border border-border"
               >
-                <div className="aspect-video bg-bg-primary rounded-lg flex items-center justify-center mb-3">
-                  <Image className="w-8 h-8 text-text-muted" />
-                </div>
+                {thumbImages[i] ? (
+                  <img
+                    src={thumbImages[i]}
+                    alt={`Thumbnail ${i + 1}`}
+                    className="aspect-video w-full object-cover rounded-lg mb-3"
+                  />
+                ) : (
+                  <div className="aspect-video bg-bg-primary rounded-lg flex items-center justify-center mb-3">
+                    <Image className="w-8 h-8 text-text-muted" />
+                  </div>
+                )}
                 <p className="text-sm">{thumb.concept}</p>
                 {thumb.textOverlay && (
                   <p className="text-xs text-accent-red mt-1">
                     Text: {thumb.textOverlay}
                   </p>
                 )}
+                <div className="mt-3">
+                  <ImageGenerationPanel
+                    prompt={`${thumb.concept}${thumb.textOverlay ? `. Text overlay: "${thumb.textOverlay}"` : ""}`}
+                    existingImageUrl={thumbImages[i] || null}
+                    entityId={`thumb-${i}`}
+                    entityType="thumbnail"
+                    defaultAspectRatio="16:9"
+                    onGenerate={(settings) => handleThumbGenerate(i, thumb.concept, thumb.textOverlay, settings)}
+                    onSaveSelected={(imageUrl) => handleThumbSave(i, imageUrl)}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -1869,7 +1852,7 @@ function ProductionTab({
           />
         ) : (
           <pre className="text-sm font-mono whitespace-pre-wrap bg-bg-secondary rounded-lg p-4">
-            {pkg.description || "No description generated"}
+            {resolvedDescription || "No description generated"}
           </pre>
         )}
       </div>
